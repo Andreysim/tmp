@@ -824,27 +824,32 @@ int main(int argc, char** argv) {
 		Logger::err() << "Not enough args" << endl;
 		return 1;
     }
-    for (char** it = argv + 1; *it; ++it) {
-        string opt = *it;
-        if (!*++it) {
-            break;
-        }
-        if (opt == "-h") {
-            addr = *it;
-        } else if (opt == "-p") {
-            port = strtoul(*it, nullptr, 10);
-        } else if (opt == "-d") {
-            dir = *it;
-            if (!dir.empty()) {
-                const size_t pos = dir.find_last_not_of('/');
-                if (pos == string::npos) {
-                    dir.clear();
-                } else {
-                    dir.resize(pos + 1);
+	int opt;
+	while ((opt = ::getopt(argc, argv, "h:p:d:")) != -1) {
+		if (!optarg) {
+			Logger::err() << "No argument" << endl;
+			return 1;
+		}
+		switch (opt) {
+			case 'h':
+				addr = optarg;
+				break;
+			case 'p':
+				port = (uint16_t)strtoul(optarg, nullptr, 10);
+				break;
+			case 'd':
+				dir = optarg;
+            	if (!dir.empty()) {
+                	const size_t pos = dir.find_last_not_of('/');
+	                if (pos == string::npos) {
+    	                dir.clear();
+        	        } else {
+            	        dir.resize(pos + 1);
+					}
                 }
-            }
-        }
-    }
+				break;
+		}	
+	}
 
     ServerBase serv;
     serv.run(addr, port, dir);
