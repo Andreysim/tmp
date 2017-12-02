@@ -817,6 +817,12 @@ int main(int argc, char** argv) {
 
     setsid();
 
+	Logger::log() << "Command line:\n";
+	for (char** it = argv; *it; ++it) {
+		Logger::log() << *it << ' ';
+	}
+	Logger::log() << endl;
+
     string addr;
     string dir;
     uint16_t port = 0;
