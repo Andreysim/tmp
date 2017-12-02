@@ -776,7 +776,9 @@ class ServerBase : MyObjBase {
                         "\r\n"
                         + out;
                 } else {
-                    out = "HTTP/1.0 404 Not Found\r\n\r\n";
+                    out = "HTTP/1.0 404 Not Found\r\n"
+						"Content-Type: text/html; charset=utf-8\r\n"
+						"Content-Length: 0\r\n\r\n";
                 }
 				Logger::log() << "Response:\n[" << out << ']' << endl;
                 const Packet p(out.c_str(), out.size());
