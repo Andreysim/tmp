@@ -1,4 +1,3 @@
-#include <iostream>
 #include <fstream>
 #include <sstream>
 
@@ -350,7 +349,6 @@ class HttpRequestBuilder : public MyObjBase {
                     ret = process();
                 } while (ret == RetState::Finished);
                 if (ret == RetState::Error) {
-                    cerr << "Bad request" << endl;
                     m_buff.clear();
                     m_state = State::ReadRequestLineState;
                 }
@@ -590,7 +588,6 @@ class SocketThread {
                 lk.unlock();
 
                 if (m_exit.load()) {
-					cerr << "Exit socket loop" << endl;
                     break;
                 }
 
@@ -611,7 +608,6 @@ class SocketThread {
 					nullptr
 				);
                 if (res < 0) {
-                    cerr << "Select error (" << res << ")." << endl;
                 } else if (res > 0) {
                     for (const SocketPtr& s : m_sockets) {
                         if (!FD_ISSET(s->descriptor(), &fd)) {
@@ -620,10 +616,8 @@ class SocketThread {
                         bool isOk = true;
                         Packet p = s->read(&isOk);
                         if (!isOk) {
-                            cerr << "Socket read error." << endl;
                             s->close();
                         } else if (p.size() == 0) {
-							cerr << "Connection closed." << endl;
                             s->close();
                         } else {
                             SockReadEvent rdEvent(s.get(), std::move(p));
@@ -655,7 +649,6 @@ class ServerBase : MyObjBase {
             m_dir = dir;
             m_listener.reset(new Socket);
             if(!m_listener->listen(addr, port)) {
-				cerr << "Listen errror." << endl;
                 return false;
             }
             for (size_t i = 0; i < 4; ++i) {
@@ -665,10 +658,8 @@ class ServerBase : MyObjBase {
             while (true) {
                 Socket s = m_listener->accept();
                 if (!s) {
-                    cerr << "Accept error." << endl;
                     break;
                 }
-				cerr << "Accepted socket" << endl;
                 moveToWorker(std::move(s));
             }
             for (unique_ptr<SocketThread>& worker : m_workers) {
@@ -719,7 +710,6 @@ class ServerBase : MyObjBase {
                 }
                 const Packet p(out.c_str(), out.size());
                 if (!ev->socket()->write(p)) {
-                    cerr << "Socket write error" << endl;
                     ev->socket()->close();
                 }
             }
@@ -747,6 +737,9 @@ int main(int argc, char** argv) {
     if(::fork()) {
         return 0;
     }
+	::close(STDIN_FILENO);
+	::close(STDOUT_FILENO);
+	::close(STDERR_FILENO);
 
     setsid();
 
@@ -754,7 +747,6 @@ int main(int argc, char** argv) {
     string dir;
     uint16_t port = 0;
     if (argc < 7) {
-        cerr << "Not enough args" << endl;
 		return 1;
     }
     for (char** it = argv + 1; *it; ++it) {
