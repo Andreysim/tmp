@@ -1,4 +1,9 @@
 *.txt
 !**/CMakeLists.txt
-*.out
+CMakeFiles/**
+**/Makefile
+*.cmake
+*.swp
 *.html
+final
+

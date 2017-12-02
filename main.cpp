@@ -26,6 +26,31 @@
 
 using namespace std;
 
+class Logger {
+	public:
+		Logger() = delete;
+		static ostream&  log() {
+			if (!m_logFile.is_open()) {
+				m_logFile.open("/home/box/log.txt", m_logFile.out | m_logFile.app);
+				m_logFile.rdbuf()->pubsetbuf(0, 0);
+			}
+			return m_logFile;
+		}
+		static ostream& err() {
+			if (!m_errLogFile.is_open()) {
+				m_errLogFile.open("/home/box/err_log.txt", m_errLogFile.out | m_errLogFile.app);
+				m_errLogFile.rdbuf()->pubsetbuf(0, 0);
+			}
+			return m_errLogFile;
+		}
+	private:
+		static ofstream m_logFile;
+		static ofstream m_errLogFile;
+};
+
+ofstream Logger::m_logFile;
+ofstream Logger::m_errLogFile;
+
 template<typename T>
 class BaseObj;
 
@@ -208,6 +233,36 @@ struct HttpRequest {
     NameValueCont params;
 };
 
+ostream& operator << (ostream& out, const HttpRequest& r) {
+	out << "Method: ";
+	switch (r.method) {
+		case HttpMethod::Get: out << "GET"; break;
+		case HttpMethod::Post: out << "POST"; break;
+		case HttpMethod::Put: out << "PUT"; break;
+		case HttpMethod::Delete: out << "DELETE"; break;
+		default: out << "UNKNOWN"; break;
+	}
+	out << '\n'
+		<< "URI: \"" << r.uri << "\"\n"
+		<< "Version: \"" << r.version << "\"\n"
+		<< "Path: \"" << r.path << "\"\n";
+	out << "Headers:\n";
+	for (const auto& p : r.headers) {
+		out << '"' << p.first << "\" : \"" << p.second << "\"\n";
+	}
+	out << "Cookies:\n";
+	for (const auto& p : r.cookies) {
+		out << '"' << p.first << "\" : \"" << p.second << "\"\n";
+	}
+	out << "Params:\n";
+	for (const auto& p : r.headers) {
+		out << '"' << p.first << "\" : \"" << p.second << "\"\n";
+	}
+	out.flush();
+	return out;
+}
+	
+
 class SockReadEvent : public MyEventBase {
     public:
         SockReadEvent(MyObjBase* sock, Packet packet)
@@ -349,6 +404,10 @@ class HttpRequestBuilder : public MyObjBase {
                     ret = process();
                 } while (ret == RetState::Finished);
                 if (ret == RetState::Error) {
+					Logger::err()
+						<< "Bad request (" << (int)m_state
+						<< ")\nCurrent request:\n" << *m_request
+						<< "\nCurrent buffer:\n" << m_buff << endl;
                     m_buff.clear();
                     m_state = State::ReadRequestLineState;
                 }
@@ -608,6 +667,7 @@ class SocketThread {
 					nullptr
 				);
                 if (res < 0) {
+					Logger::err() << "select error" << endl;
                 } else if (res > 0) {
                     for (const SocketPtr& s : m_sockets) {
                         if (!FD_ISSET(s->descriptor(), &fd)) {
@@ -616,8 +676,10 @@ class SocketThread {
                         bool isOk = true;
                         Packet p = s->read(&isOk);
                         if (!isOk) {
+							Logger::err() << "Socket read error" << endl;
                             s->close();
                         } else if (p.size() == 0) {
+							Logger::log() << "Connection closed" << endl;
                             s->close();
                         } else {
                             SockReadEvent rdEvent(s.get(), std::move(p));
@@ -646,22 +708,30 @@ class ServerBase : MyObjBase {
 
     public:
         bool run(const string& addr, uint16_t port, const string& dir = "") {
+
+			Logger::log() << "Starting server at " << addr << ':' << port << ". Directory: \"" << dir << "\"" << endl;
+
             m_dir = dir;
             m_listener.reset(new Socket);
             if(!m_listener->listen(addr, port)) {
+				Logger::err() << "Listen failed" << endl;
                 return false;
             }
+			Logger::log() << "Creating workers" << endl;
             for (size_t i = 0; i < 4; ++i) {
                 m_workers.emplace_back(new SocketThread);
                 m_workers.back()->run();
             }
+			Logger::log() << "Begin accepting" << endl;
             while (true) {
                 Socket s = m_listener->accept();
                 if (!s) {
                     break;
                 }
+				Logger::log() << "New connection accepted" << endl;
                 moveToWorker(std::move(s));
             }
+			Logger::log() << "Terminating workers" << endl;
             for (unique_ptr<SocketThread>& worker : m_workers) {
                 worker->terminate();
                 worker->wait();
@@ -698,6 +768,7 @@ class ServerBase : MyObjBase {
             if (event->type() == Event::HttpRequest) {
                 HttpRequestEvent* ev = (HttpRequestEvent*)event;
                 string out;
+				Logger::log() << "Request received:\n" << *ev->request() << endl;
                 if (handleRequest(ev->request(), &out)) {
                     out = "HTTP/1.0 200 OK\r\n"
                         "Content-Length: " + to_string(out.size()) + "\r\n"
@@ -705,9 +776,9 @@ class ServerBase : MyObjBase {
                         "\r\n"
                         + out;
                 } else {
-                    out = "HTTP/1.0 404 Not Found\r\n"
-                        "Content-Type: text/html; charset=utf-8\r\n\r\n";
+                    out = "HTTP/1.0 404 Not Found\r\n\r\n";
                 }
+				Logger::log() << "Response:\n" << out << endl;
                 const Packet p(out.c_str(), out.size());
                 if (!ev->socket()->write(p)) {
                     ev->socket()->close();
@@ -726,6 +797,7 @@ class ServerBase : MyObjBase {
             }
             return true;
         }
+
     private:
         SocketPtr m_listener;
         vector<unique_ptr<SocketThread>> m_workers;
@@ -747,6 +819,7 @@ int main(int argc, char** argv) {
     string dir;
     uint16_t port = 0;
     if (argc < 7) {
+		Logger::err() << "Not enough args" << endl;
 		return 1;
     }
     for (char** it = argv + 1; *it; ++it) {
