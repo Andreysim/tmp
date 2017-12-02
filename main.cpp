@@ -255,7 +255,7 @@ ostream& operator << (ostream& out, const HttpRequest& r) {
 		out << '"' << p.first << "\" : \"" << p.second << "\"\n";
 	}
 	out << "Params:\n";
-	for (const auto& p : r.headers) {
+	for (const auto& p : r.params) {
 		out << '"' << p.first << "\" : \"" << p.second << "\"\n";
 	}
 	out.flush();
@@ -768,7 +768,7 @@ class ServerBase : MyObjBase {
             if (event->type() == Event::HttpRequest) {
                 HttpRequestEvent* ev = (HttpRequestEvent*)event;
                 string out;
-				Logger::log() << "Request received:\n" << *ev->request() << endl;
+				Logger::log() << "Request received:\n[" << *ev->request() <<']' << endl;
                 if (handleRequest(ev->request(), &out)) {
                     out = "HTTP/1.0 200 OK\r\n"
                         "Content-Length: " + to_string(out.size()) + "\r\n"
@@ -778,7 +778,7 @@ class ServerBase : MyObjBase {
                 } else {
                     out = "HTTP/1.0 404 Not Found\r\n\r\n";
                 }
-				Logger::log() << "Response:\n" << out << endl;
+				Logger::log() << "Response:\n[" << out << ']' << endl;
                 const Packet p(out.c_str(), out.size());
                 if (!ev->socket()->write(p)) {
                     ev->socket()->close();
